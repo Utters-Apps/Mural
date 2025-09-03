@@ -1,125 +1,188 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <title>Mural de Atividades</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    body {
-      background: linear-gradient(135deg, #667eea, #764ba2, #f5576c);
-      background-size: 300% 300%;
-      animation: gradient 10s ease infinite;
-    }
-    @keyframes gradient {
-      0% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
-      100% { background-position: 0% 50%; }
-    }
-  </style>
-</head>
-<body class="min-h-screen p-6">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Plataforma de Matérias</title>
+<script type="module">
+  // Firebase imports
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getFirestore, collection, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
-  <!-- Título -->
-  <h1 class="text-5xl text-center font-extrabold text-white drop-shadow-lg mb-10">
-    📌 Mural de Atividades
-  </h1>
+  // --- CONFIGURAÇÃO FIREBASE ---
+  const firebaseConfig = {
+    apiKey: "AIzaSyC1CVC62x5Ut_yTPhfaebvTw6hDWuYpvTw",
+    authDomain: "twi-hub-59d9f.firebaseapp.com",
+    projectId: "twi-hub-59d9f",
+    storageBucket: "twi-hub-59d9f.appspot.com",
+    messagingSenderId: "326239988599",
+    appId: "1:326239988599:web:5cc5517d3e2d26730f8f72",
+    measurementId: "G-W4LS08WVQD"
+  };
 
-  <!-- Painel Admin -->
-  <div id="adminPanel" class="max-w-2xl mx-auto mb-10 p-6 rounded-2xl bg-white/20 backdrop-blur-lg shadow-lg border border-white/30 hidden">
-    <h2 class="text-2xl font-bold text-white mb-4">Postar Material</h2>
-    <input id="titleInput" placeholder="Título" class="w-full p-3 mb-3 rounded-xl border border-white/40 bg-white/30 text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-pink-400">
-    <textarea id="descInput" placeholder="Descrição" rows="3" class="w-full p-3 mb-3 rounded-xl border border-white/40 bg-white/30 text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-pink-400"></textarea>
-    
-    <!-- Upload estilizado -->
-    <label class="block w-full p-3 mb-3 rounded-xl border-2 border-dashed border-white/50 text-white text-center cursor-pointer hover:border-pink-400 transition">
-      📷 Clique para enviar imagem
-      <input type="file" id="imageInput" class="hidden">
-    </label>
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const storage = getStorage(app);
 
-    <button onclick="postMaterial()" class="w-full bg-pink-500 hover:bg-pink-600 text-white font-bold py-3 rounded-xl transition shadow-lg">
-      🚀 Publicar
-    </button>
-  </div>
+  // --- VARIÁVEIS GLOBAIS ---
+  const postsEl = document.getElementById('posts');
+  const filterSelect = document.getElementById('filterSubject');
+  const reloadBtn = document.getElementById('reloadPosts');
+  const openModalBtn = document.getElementById('openModal');
+  const modal = document.getElementById('postModal');
+  const closeModalBtn = document.getElementById('closeModal');
+  const publishBtn = document.getElementById('publishPost');
+  const titleInput = document.getElementById('title');
+  const subjectInput = document.getElementById('subject');
+  const authorInput = document.getElementById('author');
+  const dateInput = document.getElementById('date');
+  const contentInput = document.getElementById('content');
+  const imagesInput = document.getElementById('images');
+  const codeInput = document.getElementById('postCode');
 
-  <!-- Lista -->
-  <div id="mural" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+  const SUBJECTS = ["Português", "Matemática", "Ciências", "História", "Geografia", "Inglês", "Espanhol", "Educação Física", "Artes", "Bíblia", "Filosofia", "Lógica"];
+  const POST_CODE = "Estudo@2025!"; // senha aprimorada
+  let postsData = [];
 
-  <!-- Firebase + Script -->
-  <script type="module">
-    // Firebase imports
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-    import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
-    import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js";
+  // --- INICIALIZAÇÃO ---
+  function initSubjects() {
+    filterSelect.innerHTML = `<option value="">Todas</option>`;
+    SUBJECTS.forEach(s => filterSelect.innerHTML += `<option value="${s}">${s}</option>`);
+    subjectInput.innerHTML = `<option value="">Selecione</option>` + SUBJECTS.map(s=>`<option value="${s}">${s}</option>`).join('');
+  }
 
-    // Configuração Firebase
-    const firebaseConfig = {
-      apiKey: "AIzaSyC1CVC62x5Ut_yTPhfaebvTw6hDWuYpvTw",
-      authDomain: "twi-hub-59d9f.firebaseapp.com",
-      projectId: "twi-hub-59d9f",
-      storageBucket: "twi-hub-59d9f.firebasestorage.app",
-      messagingSenderId: "326239988599",
-      appId: "1:326239988599:web:5cc5517d3e2d26730f8f72",
-      measurementId: "G-W4LS08WVQD"
-    };
+  // --- MODAL ---
+  openModalBtn.onclick = ()=> modal.style.display='flex';
+  closeModalBtn.onclick = ()=> modal.style.display='none';
 
-    // Inicializa Firebase
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const storage = getStorage(app);
+  // --- TOAST ---
+  function toast(msg){ const t = document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
 
-    const mural = document.getElementById("mural");
-    const adminPanel = document.getElementById("adminPanel");
+  // --- PUBLICAR POST ---
+  async function publishPost() {
+    if(codeInput.value !== POST_CODE){ toast('Código incorreto'); return; }
+    const title = titleInput.value.trim();
+    const subject = subjectInput.value;
+    const author = authorInput.value.trim();
+    const content = contentInput.value.trim();
+    const date = dateInput.value || new Date().toISOString().slice(0,10);
+    if(!title || !subject || !author || !content){ toast('Preencha todos os campos'); return; }
 
-    // Simulação de admin
-    const isAdmin = true; // 🔑 troque depois para controle real
-    if (isAdmin) adminPanel.classList.remove("hidden");
-
-    // Função postar material
-    async function postMaterial() {
-      const title = document.getElementById("titleInput").value.trim();
-      const desc = document.getElementById("descInput").value.trim();
-      const file = document.getElementById("imageInput").files[0];
-
-      if (!title || !desc) {
-        alert("Preencha título e descrição!");
-        return;
-      }
-
-      let imageUrl = "";
-      if (file) {
-        const storageRef = ref(storage, "images/" + Date.now() + "-" + file.name);
-        await uploadBytes(storageRef, file);
-        imageUrl = await getDownloadURL(storageRef);
-      }
-
-      await addDoc(collection(db, "materiais"), {
-        title,
-        desc,
-        imageUrl,
-        createdAt: serverTimestamp()
-      });
-
-      // Reset
-      document.getElementById("titleInput").value = "";
-      document.getElementById("descInput").value = "";
-      document.getElementById("imageInput").value = "";
-    }
-
-    // Escuta em tempo real
-    const q = query(collection(db, "materiais"), orderBy("createdAt", "desc"));
-    onSnapshot(q, (snapshot) => {
-      mural.innerHTML = "";
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        mural.innerHTML += `
-          <div class="bg-white/20 backdrop-blur-md p-5 rounded-2xl shadow-xl border border-white/30 transform hover:scale-[1.03] transition">
-            <h2 class="text-xl font-bold text-white mb-2">${data.title}</h2>
-            <p class="text-white/80 mb-3">${data.desc}</p>
-            ${data.imageUrl ? `<img src="${data.imageUrl}" class="rounded-lg shadow-md">` : ""}
-          </div>
-        `;
-      });
+    const docRef = await addDoc(collection(db,'posts'),{
+      title, subject, author, content, date, images: [], createdAt: serverTimestamp()
     });
-  </script>
+
+    const files = Array.from(imagesInput.files || []);
+    if(files.length){
+      const urls = [];
+      for(let f of files){
+        const path = `post_images/${docRef.id}/${Date.now()}_${f.name}`;
+        const sref = storageRef(storage, path);
+        await uploadBytes(sref,f);
+        const url = await getDownloadURL(sref);
+        urls.push(url);
+      }
+      await updateDoc(docRef,{images: urls});
+    }
+
+    toast('Matéria publicada');
+    modal.style.display='none';
+    titleInput.value=''; subjectInput.value=''; authorInput.value=''; contentInput.value=''; dateInput.value=''; imagesInput.value=''; codeInput.value='';
+  }
+
+  publishBtn.onclick = publishPost;
+
+  // --- LISTAR POSTS ---
+  function renderPosts() {
+    const filter = filterSelect.value;
+    const list = postsData.filter(p=>!filter||p.subject===filter).sort((a,b)=>new Date(b.createdAt?.seconds*1000||0)-new Date(a.createdAt?.seconds*1000||0));
+    postsEl.innerHTML = list.map(p=>`
+      <div class="post-card card">
+        <div class="meta">${p.subject} • ${p.date} • <strong>${p.author}</strong></div>
+        <div class="post-title">${p.title}</div>
+        <div class="post-text">${p.content.slice(0,200)}${p.content.length>200?'...':''}</div>
+        ${p.images?.length? `<img src="${p.images[0]}" style="width:100%;height:160px;object-fit:cover;border-radius:8px;margin-top:8px;cursor:pointer" onclick="viewMore('${p.id}')">`: ''}
+        <button onclick="deletePost('${p.id}')" style="margin-top:6px">🗑️ Apagar</button>
+      </div>
+    `).join('');
+  }
+
+  filterSelect.onchange = renderPosts;
+  reloadBtn.onclick = ()=> renderPosts();
+
+  window.viewMore = function(id){
+    const p = postsData.find(x=>x.id===id);
+    if(!p) return;
+    alert(`Título: ${p.title}\nMatéria: ${p.subject}\nAutor: ${p.author}\nData: ${p.date}\n\n${p.content}`);
+  }
+
+  window.deletePost = async function(id){
+    if(!confirm('Tem certeza que deseja apagar este post?')) return;
+    await deleteDoc(doc(db,'posts',id));
+    toast('Post apagado');
+  }
+
+  // --- FIRESTORE REALTIME ---
+  const q = query(collection(db,'posts'), orderBy('createdAt','desc'));
+  onSnapshot(q, snap => {
+    postsData = snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderPosts();
+  });
+
+  initSubjects();
+</script>
+
+<style>
+body{margin:0;font-family:Inter,sans-serif;background:#0f1724;color:#e6eef8;}
+header{display:flex;align-items:center;justify-content:space-between;padding:12px 24px;background:linear-gradient(90deg,#7c3aed33,#06b6d433);border-bottom:1px solid rgba(255,255,255,0.05);}
+h1{margin:0;font-size:20px}
+button{padding:8px 12px;border:none;border-radius:8px;cursor:pointer;font-weight:600}
+.btn-primary{background:linear-gradient(90deg,#7c3aed,#06b6d4);color:#021025}
+.container{padding:16px;max-width:1200px;margin:auto}
+.card{background:rgba(255,255,255,0.03);padding:12px;border-radius:12px;margin-bottom:12px}
+.post-card{background:rgba(255,255,255,0.02);padding:12px;border-radius:12px;margin-bottom:12px}
+.meta{font-size:13px;color:#94a3b8;margin-bottom:4px}
+.post-title{font-weight:700;font-size:16px;margin-bottom:4px}
+.post-text{font-size:14px;color:#dbeafe}
+#postModal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);justify-content:center;align-items:center}
+#postModal .modal-content{background:#0b1220;padding:16px;border-radius:12px;width:95%;max-width:500px;display:flex;flex-direction:column;gap:8px}
+#toast{position:fixed;bottom:16px;right:16px;background:rgba(2,6,23,0.8);padding:10px 14px;border-radius:10px;display:none}
+#toast.show{display:block}
+</style>
+
+</head>
+<body>
+<header>
+  <h1>Plataforma de Matérias</h1>
+  <div>
+    <button id="openModal" class="btn-primary">Adicionar Matéria</button>
+    <select id="filterSubject"><option value="">Todas</option></select>
+    <button id="reloadPosts">Recarregar</button>
+  </div>
+</header>
+
+<div class="container">
+  <div id="posts"></div>
+</div>
+
+<div id="postModal">
+  <div class="modal-content">
+    <h3>Adicionar Matéria</h3>
+    <input id="title" placeholder="Título">
+    <select id="subject"></select>
+    <input id="author" placeholder="Autor">
+    <input id="date" type="date" value="">
+    <textarea id="content" placeholder="Conteúdo da matéria"></textarea>
+    <input id="images" type="file" accept="image/*" multiple>
+    <input id="postCode" placeholder="Código de publicação">
+    <div style="display:flex;gap:8px">
+      <button id="publishPost" class="btn-primary">Publicar</button>
+      <button id="closeModal">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
 </body>
 </html>
