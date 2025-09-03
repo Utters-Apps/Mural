@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Mural de Atividades</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background: linear-gradient(135deg, #667eea, #764ba2, #f5576c);
+      background-size: 300% 300%;
+      animation: gradient 10s ease infinite;
+    }
+    @keyframes gradient {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+  </style>
+</head>
+<body class="min-h-screen p-6">
+
+  <!-- Título -->
+  <h1 class="text-5xl text-center font-extrabold text-white drop-shadow-lg mb-10">
+    📌 Mural de Atividades
+  </h1>
+
+  <!-- Painel Admin -->
+  <div id="adminPanel" class="max-w-2xl mx-auto mb-10 p-6 rounded-2xl bg-white/20 backdrop-blur-lg shadow-lg border border-white/30 hidden">
+    <h2 class="text-2xl font-bold text-white mb-4">Postar Material</h2>
+    <input id="titleInput" placeholder="Título" class="w-full p-3 mb-3 rounded-xl border border-white/40 bg-white/30 text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-pink-400">
+    <textarea id="descInput" placeholder="Descrição" rows="3" class="w-full p-3 mb-3 rounded-xl border border-white/40 bg-white/30 text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-pink-400"></textarea>
+    
+    <!-- Upload estilizado -->
+    <label class="block w-full p-3 mb-3 rounded-xl border-2 border-dashed border-white/50 text-white text-center cursor-pointer hover:border-pink-400 transition">
+      📷 Clique para enviar imagem
+      <input type="file" id="imageInput" class="hidden">
+    </label>
+
+    <button onclick="postMaterial()" class="w-full bg-pink-500 hover:bg-pink-600 text-white font-bold py-3 rounded-xl transition shadow-lg">
+      🚀 Publicar
+    </button>
+  </div>
+
+  <!-- Lista -->
+  <div id="mural" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+
+  <!-- Firebase + Script -->
+  <script type="module">
+    // Firebase imports
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+    import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+    import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js";
+
+    // Configuração Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyC1CVC62x5Ut_yTPhfaebvTw6hDWuYpvTw",
+      authDomain: "twi-hub-59d9f.firebaseapp.com",
+      projectId: "twi-hub-59d9f",
+      storageBucket: "twi-hub-59d9f.firebasestorage.app",
+      messagingSenderId: "326239988599",
+      appId: "1:326239988599:web:5cc5517d3e2d26730f8f72",
+      measurementId: "G-W4LS08WVQD"
+    };
+
+    // Inicializa Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const storage = getStorage(app);
+
+    const mural = document.getElementById("mural");
+    const adminPanel = document.getElementById("adminPanel");
+
+    // Simulação de admin
+    const isAdmin = true; // 🔑 troque depois para controle real
+    if (isAdmin) adminPanel.classList.remove("hidden");
+
+    // Função postar material
+    async function postMaterial() {
+      const title = document.getElementById("titleInput").value.trim();
+      const desc = document.getElementById("descInput").value.trim();
+      const file = document.getElementById("imageInput").files[0];
+
+      if (!title || !desc) {
+        alert("Preencha título e descrição!");
+        return;
+      }
+
+      let imageUrl = "";
+      if (file) {
+        const storageRef = ref(storage, "images/" + Date.now() + "-" + file.name);
+        await uploadBytes(storageRef, file);
+        imageUrl = await getDownloadURL(storageRef);
+      }
+
+      await addDoc(collection(db, "materiais"), {
+        title,
+        desc,
+        imageUrl,
+        createdAt: serverTimestamp()
+      });
+
+      // Reset
+      document.getElementById("titleInput").value = "";
+      document.getElementById("descInput").value = "";
+      document.getElementById("imageInput").value = "";
+    }
+
+    // Escuta em tempo real
+    const q = query(collection(db, "materiais"), orderBy("createdAt", "desc"));
+    onSnapshot(q, (snapshot) => {
+      mural.innerHTML = "";
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        mural.innerHTML += `
+          <div class="bg-white/20 backdrop-blur-md p-5 rounded-2xl shadow-xl border border-white/30 transform hover:scale-[1.03] transition">
+            <h2 class="text-xl font-bold text-white mb-2">${data.title}</h2>
+            <p class="text-white/80 mb-3">${data.desc}</p>
+            ${data.imageUrl ? `<img src="${data.imageUrl}" class="rounded-lg shadow-md">` : ""}
+          </div>
+        `;
+      });
+    });
+  </script>
+</body>
+</html>
